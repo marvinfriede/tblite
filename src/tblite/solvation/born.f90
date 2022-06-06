@@ -61,7 +61,7 @@ subroutine new_born_integrator(self, mol, vdwrad, descreening, born_scale, born_
    !> Molecular structure data
    type(structure_type), intent(in) :: mol
    !> Van-der-Waals Radii
-   real(wp), intent(in) :: vdwRad(:)
+   real(wp), intent(in) :: vdwrad(:)
    !> Dielectric descreening parameter
    real(wp), intent(in), optional :: descreening(:)
    !> Scaling factor for Born radii
@@ -88,7 +88,7 @@ subroutine new_born_integrator(self, mol, vdwrad, descreening, born_scale, born_
       self%obc = obc
    end if
 
-   self%vdwr = vdwRad(mol%id)
+   self%vdwr = vdwrad(mol%id)
 
    if (present(descreening)) then
       self%rho = self%vdwr * descreening(mol%id)
@@ -154,39 +154,46 @@ subroutine compute_bornr(nat, xyz, list, vdwr, rho, svdw, c1, obc, &
    real(wp), intent(out) :: brdr(:, :, :)
 
    integer :: iat
-   real(wp) :: br, dpsi, svdwi, vdwri, s1, v1, s2, arg, arg2
+   real(wp) :: p, dpsi, svdwi, vdwri, s1, v1, s2, arg, arg2
    real(wp) :: th, ch, alpi, beti, gami
 
-   call compute_psi(nat, xyz, list, vdwr, rho, brad, brdr)
+   call compute_psi(nat, xyz, list, vdwr, rho,brad, brdr)
+
+   write(*, *) "nat", nat
 
    do iat = 1, nat
 
-      br = brad(iat)
+      p = brad(iat)
 
       svdwi = svdw(iat)
       vdwri = vdwr(iat)
       s1 = 1.0_wp/svdwi
       v1 = 1.0_wp/vdwri
       s2 = 0.5_wp*svdwi
-
-      br = br*s2
-
-      arg2 = br*(obc(3)*br-obc(3))
-      arg = br*(obc(1)+arg2)
-      arg2 = 2.0_wp*arg2+obc(1)+obc(3)*br*br
-
+      
+      p = p*s2
+      
+      arg2 = p*(obc(3)*p-obc(3)) ! last factor is wrong -> obc(2)
+      arg = p*(obc(1)+arg2)
+      
+      
+      ! for derivative
+      arg2 = 2.0_wp*arg2+obc(1)+obc(3)*p*p
+      
+      ! Eq.6: tanh(alpha*psi - beta*psi^2 + gamma*psi^3)
       th = tanh(arg)
       ch = cosh(arg)
-
-      br = 1.0_wp/(s1-v1*th)
+      
+      p = 1.0_wp/(s1-v1*th)
       ! Include GBMV2-like scaling
-      br = c1*br
+      p = c1*p
+      write(*, *) arg, p
 
       dpsi = ch*(s1-v1*th)
       dpsi = s2*v1*arg2/(dpsi*dpsi)
       dpsi = c1*dpsi
 
-      brad(iat) = br
+      brad(iat) = p
       brdr(:, :, iat) = brdr(:, :, iat) * dpsi
 
    end do
