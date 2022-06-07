@@ -187,8 +187,7 @@ subroutine compute_bornr(nat, xyz, list, vdwr, rho, svdw, c1, obc, &
       p = 1.0_wp/(s1-v1*th)
       ! Include GBMV2-like scaling
       p = c1*p
-      write(*, *) arg, p
-
+      
       dpsi = ch*(s1-v1*th)
       dpsi = s2*v1*arg2/(dpsi*dpsi)
       dpsi = c1*dpsi
@@ -201,7 +200,7 @@ subroutine compute_bornr(nat, xyz, list, vdwr, rho, svdw, c1, obc, &
 end subroutine compute_bornr
 
 
-pure subroutine compute_psi(nat, xyz, list, vdwr, rho, psi, dpsidr)
+subroutine compute_psi(nat, xyz, list, vdwr, rho, psi, dpsidr)
    !> Number of atoms
    integer, intent(in) :: nat
    !> Cartesian coordinates
@@ -238,15 +237,15 @@ pure subroutine compute_psi(nat, xyz, list, vdwr, rho, psi, dpsidr)
 
          vec(:) = xyz(:, iat) - xyz(:, jat)
          r = norm2(vec)
-
+         
          rhoi = rho(iat)
          rhoj = rho(jat)
          rvdwi = vdwr(iat)
          rvdwj = vdwr(jat)
-
+         
          ijov = r < (rvdwi+rhoj)
          jiov = r < (rhoi+rvdwj)
-
+         
          if (.not.(ijov .or. jiov)) then
             ! nonoverlaping spheres
             if(abs(rhoi-rhoj) < 1.e-8_wp) then
@@ -262,6 +261,9 @@ pure subroutine compute_psi(nat, xyz, list, vdwr, rho, psi, dpsidr)
                ! accumulate psi
                psi(iat) = psi(iat)+gi
                psi(jat) = psi(jat)+gi
+
+              !  write(*, *) iat, jat, gi, psi(iat), psi(jat)
+
                ! accumulate psi gradient
                drjj(:) = dgi*vec(:)
                dpsitr(:, iat) = dpsitr(:, iat)+drjj(:)
@@ -299,6 +301,8 @@ pure subroutine compute_psi(nat, xyz, list, vdwr, rho, psi, dpsidr)
                dpsitr(:, jat) = dpsitr(:, jat)-drjj(:)
                dpsidr(:, iat, jat) = dpsidr(:, iat, jat)+drjj(:)
             end if
+
+            ! write(*, *) iat, jat, gi, gj, psi(iat), psi(jat)
 
          else if (.not.ijov .and. jiov) then
 
@@ -445,10 +449,13 @@ pure subroutine compute_psi(nat, xyz, list, vdwr, rho, psi, dpsidr)
                dpsidr(:, iat, jat) = dpsidr(:, iat, jat)+drjj(:)
             end if
 
-         end if
+         
+          end if
 
       end do
    end do
+
+   write(*,*) 'psi', psi
 
    ! save one-center terms
    do iat = 1, nat
