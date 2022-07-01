@@ -112,7 +112,7 @@ subroutine test_mb01(error)
       & 3.20882938587537E+0_wp, 3.20921511705709E+0_wp, 2.53773676318564E+0_wp, &
       & 4.00110742187589E+0_wp]
 
-   call get_structure(mol, "MB16-43", "01")
+   call get_structure(mol, "MB16-43", "SiH4")
 
    allocate(rad(mol%nat), draddr(3, mol%nat, mol%nat))
    rvdw = get_vdw_rad_d3(mol%num)

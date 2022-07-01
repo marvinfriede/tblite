@@ -173,7 +173,7 @@ subroutine compute_bornr(nat, xyz, list, vdwr, rho, svdw, c1, obc, &
       
       p = p*s2
       
-      arg2 = p*(obc(3)*p-obc(3)) ! last factor is wrong -> obc(2)
+      arg2 = p*(obc(3)*p-obc(2)) ! last factor is wrong -> obc(2)
       arg = p*(obc(1)+arg2)
       
       
