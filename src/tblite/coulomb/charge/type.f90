@@ -161,8 +161,11 @@ contains
       type(coulomb_cache), pointer :: ptr
 
       call view(cache, ptr)
+      write (*, *) "wfn%qsh: ", wfn%qsh
+      write (*, *) "pot%vsh: ", pot%vsh
 
       call symv(ptr%amat, wfn%qsh(:, 1), pot%vsh(:, 1), beta=1.0_wp)
+      write (*, *) "pot%vsh: ", pot%vsh
 
    end subroutine get_potential
 

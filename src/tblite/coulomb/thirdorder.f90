@@ -129,15 +129,9 @@ contains
             izp = mol%id(iat)
             energies(iat) = energies(iat) &
                & + wfn%qat(iat, 1)**3*self%hubbard_derivs(1, izp)/3.0_wp
-            write (*, *) "iat = ", iat, " energies(iat) = ", energies(iat)
-            write (*, *) "self%hubbard_derivs = ", self%hubbard_derivs(1, izp)
-            write (*, *) wfn%qat(iat, 1)**3*self%hubbard_derivs(1, izp)/3.0_wp
          end do
       end if
 
-      write (*, *) "qat = ", wfn%qat(:, 1)
-      write (*, *) "hubbard_derivs = ", self%hubbard_derivs
-      write (*, *) "diff = ", energies - old
    end subroutine get_energy
 
 !> Evaluate charge dependent potential shift from the interaction

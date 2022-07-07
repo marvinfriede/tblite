@@ -53,16 +53,16 @@ contains
       type(unittest_type), allocatable, intent(out) :: testsuite(:)
 
       testsuite = [ &
-                  !new_unittest("energy-atom-e1", test_e_effective_m01), &
+                  new_unittest("energy-atom-e1", test_e_effective_m01) &
                   !new_unittest("energy-atom-e2", test_e_effective_m02) &
-                  new_unittest("energy-shell-e1", test_e_effective_m07) &
+                  ! new_unittest("energy-shell-e1", test_e_effective_m07) &
                   ! new_unittest("energy-atom-pbc-e2", test_e_effective_oxacb), &
                   ! new_unittest("energy-atom-sc-e2", test_e_effective_oxacb_sc), &
                   ! new_unittest("energy-atom-g1", test_e_effective_m10), &
                   ! new_unittest("energy-shell-g2", test_e_effective_m13), &
                   ! new_unittest("gradient-atom-e1", test_g_effective_m03), &
                   ! new_unittest("gradient-atom-e2", test_g_effective_m04), &
-                  ! new_unittest("gradient-shell-e1", test_g_effective_m08), &
+                  ! new_unittest("gradient-shell-e1", test_g_effective_m08) &
                   ! new_unittest("gradient-atom-pbc-e2", test_g_effective_co2), &
                   ! new_unittest("gradient-atom-g1", test_g_effective_m11), &
                   ! new_unittest("gradient-shell-g2", test_g_effective_m14), &
@@ -346,8 +346,6 @@ contains
       call coulomb%update(mol, cache)
       call coulomb%get_energy(mol, cache, wfn, energy)
 
-      write (*, *) 'Energy: ', energy, sum(energy)
-
       call check(error, sum(energy), ref, thr=thr_)
       if (allocated(error)) then
          print *, ref, sum(energy)
@@ -496,20 +494,26 @@ contains
       type(error_type), allocatable, intent(out) :: error
 
       type(structure_type) :: mol
+      ! real(wp), parameter :: qat(*) = [&
+      !    & 7.73347900345264E-1_wp, 1.07626888948184E-1_wp, -3.66999593831010E-1_wp,&
+      !    & 4.92833325937897E-2_wp, -1.83332156197733E-1_wp, 2.33302086605469E-1_wp,&
+      !    & 6.61837152062315E-2_wp, -5.43944165050002E-1_wp, -2.70264356583716E-1_wp,&
+      !    & 2.66618968841682E-1_wp, 2.62725033202480E-1_wp, -7.15315510172571E-2_wp,&
+      !    &-3.73300777019193E-1_wp, 3.84585237785621E-2_wp, -5.05851088366940E-1_wp,&
+      !    & 5.17677238544189E-1_wp]
+
+      ! real(wp), allocatable :: qsh(:)
+
       real(wp), parameter :: qat(*) = [&
-         & 7.73347900345264E-1_wp, 1.07626888948184E-1_wp, -3.66999593831010E-1_wp,&
-         & 4.92833325937897E-2_wp, -1.83332156197733E-1_wp, 2.33302086605469E-1_wp,&
-         & 6.61837152062315E-2_wp, -5.43944165050002E-1_wp, -2.70264356583716E-1_wp,&
-         & 2.66618968841682E-1_wp, 2.62725033202480E-1_wp, -7.15315510172571E-2_wp,&
-         &-3.73300777019193E-1_wp, 3.84585237785621E-2_wp, -5.05851088366940E-1_wp,&
-         & 5.17677238544189E-1_wp]
+      &-8.41282505804719E-2_wp, 2.10320626451180E-2_wp, 2.10320626451178E-2_wp,&
+      & 2.10320626451179E-2_wp, 2.10320626451179E-2_wp]
+      real(wp), parameter :: qsh(*) = [&
+      & 0.65663937010219842_wp, 3.5838834166484368E-2_wp, -0.41737062303296546_wp, &
+      & -7.1859260070046282E-2_wp, 3.0823647611154144E-3_wp, -7.1859260070044950E-2_wp, &
+      & 3.0823647611152557E-3_wp, -7.1859260070046727E-2_wp, 3.0823647611154179E-3_wp, &
+      & -7.1859260070045616E-2_wp, 3.0823647611153034E-3_wp]
 
-      !   real(wp), parameter :: qat(*) = [&
-      ! &-8.41282505804719E-2_wp, 2.10320626451180E-2_wp, 2.10320626451178E-2_wp,&
-      ! & 2.10320626451179E-2_wp, 2.10320626451179E-2_wp]
-      real(wp), allocatable :: qsh(:)
-
-      call get_structure(mol, "MB16-43", "01")
+      call get_structure(mol, "MB16-43", "SiH4")
 
       call test_generic(error, mol, qat, qsh, make_coulomb_e1, 0.10952019883948200_wp)
 
@@ -897,7 +901,8 @@ contains
          &-7.01857024422455E-1_wp, 2.11598132242645E-1_wp, -6.01715925641418E-1_wp]
 
       call get_structure(mol, "MB16-43", "08")
-      call test_numgrad(error, mol, qat, qsh, make_coulomb_e1)
+      call test_generic(error, mol, qat, qsh, make_coulomb_e1, 0.11889887832100766_wp)
+      ! call test_numgrad(error, mol, qat, qsh, make_coulomb_e1)
 
    end subroutine test_g_effective_m08
 
