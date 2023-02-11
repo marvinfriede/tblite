@@ -19,6 +19,8 @@ module test_spin
    use mctc_env_testing, only : new_unittest, unittest_type, error_type, check, &
       & test_failed
    use mctc_io, only : structure_type, new
+   use mctc_io_constants, only : codata
+   use mctc_io_convert, only : aatoau, ctoau
    use mstore, only : get_structure
    use tblite_basis_type, only : basis_type
    use tblite_container, only : container_type, container_cache
@@ -40,10 +42,9 @@ module test_spin
    real(wp), parameter :: thr2 = 1e+4_wp*sqrt(epsilon(1.0_wp))
    real(wp), parameter :: kt = 300.0_wp * 3.166808578545117e-06_wp
 
-  real(wp), parameter :: aatoau = 1.0_wp / 0.529177249_wp, &
-     & ctoau = 1.0_wp / 1.60217653e-19_wp, jtoau = 1.0_wp / 4.3597441775e-18_wp
-  !> Convert V/Å = J/(C·Å) to atomic units
-  real(wp), parameter :: vatoau = jtoau / (ctoau * aatoau)
+   real(wp), parameter :: jtoau = 1.0_wp / (codata%me*codata%c**2*codata%alpha**2)
+   !> Convert V/Å = J/(C·Å) to atomic units
+   real(wp), parameter :: vatoau = jtoau / (ctoau * aatoau)
 
   type, extends(container_type) :: empty_interaction
   end type empty_interaction
@@ -61,7 +62,10 @@ subroutine collect_spin(testsuite)
       new_unittest("gfn1-e-spin", test_e_crcp2), &
       new_unittest("gfn2-e-spin", test_e_p10), &
       new_unittest("gfn1-g-spin", test_g_p10), &
-      new_unittest("gfn2-g-spin", test_g_crcp2) &
+      new_unittest("gfn1-g-spin", test_g1_p10_num), &
+      new_unittest("gfn2-g-spin", test_g2_p10_num), &
+      new_unittest("gfn1-s-spin", test_s1_p10_num), &
+      new_unittest("gfn2-s-spin", test_s2_p10_num) &
       ]
 
 end subroutine collect_spin
@@ -288,6 +292,251 @@ subroutine test_g_crcp2(error)
    call test_g_gen(error, mol, calc, eref, gref)
 
 end subroutine test_g_crcp2
+
+
+!!!!!!!!!!!!!!!!!!!!!!
+! Numerical gradient !
+!!!!!!!!!!!!!!!!!!!!!!
+
+
+subroutine numdiff_grad(ctx, mol, calc, wfn, numgrad)
+   type(context_type), intent(inout) :: ctx
+   type(structure_type), intent(in) :: mol
+   type(xtb_calculator), intent(in) :: calc
+   type(wavefunction_type), intent(in) :: wfn
+   real(wp), intent(out) :: numgrad(:, :)
+
+   integer :: iat, ic
+   real(wp) :: er, el
+   type(structure_type) :: moli
+   type(wavefunction_type) :: wfni
+   real(wp), parameter :: step = 1.0e-9_wp
+   
+   numgrad(:, :) = 0.0_wp
+   do iat = 1, mol%nat
+      do ic = 1, 3
+         moli = mol
+         wfni = wfn
+         moli%xyz(ic, iat) = mol%xyz(ic, iat) + step
+         call xtb_singlepoint(ctx, moli, calc, wfni, acc, er, verbosity=0)
+
+         moli = mol
+         wfni = wfn
+         moli%xyz(ic, iat) = mol%xyz(ic, iat) - step
+         call xtb_singlepoint(ctx, moli, calc, wfni, acc, el, verbosity=0)
+
+         numgrad(ic, iat) = 0.5_wp*(er - el)/step
+      end do
+   end do
+end subroutine numdiff_grad
+
+
+subroutine test_numgrad(error, calc, mol)
+
+   !> Error handling
+   type(error_type), allocatable, intent(out) :: error
+   !> Extended tight-binding calculator
+   type(xtb_calculator), intent(inout) :: calc
+   !> Molecular structure data
+   type(structure_type) :: mol
+   
+   type(context_type) :: ctx
+   type(wavefunction_type) :: wfn
+   class(container_type), allocatable :: cont
+   real(wp) :: energy
+   real(wp), allocatable :: gradient(:, :), numgrad(:, :), sigma(:, :)
+
+   allocate(gradient(3, mol%nat), numgrad(3, mol%nat), sigma(3, 3))
+   energy = 0.0_wp
+   gradient(:, :) = 0.0_wp
+   sigma(:, :) = 0.0_wp
+
+   call new_wavefunction(wfn, mol%nat, calc%bas%nsh, calc%bas%nao, 2, kt)
+
+   block
+      type(spin_polarization), allocatable :: spin
+      real(wp), allocatable :: wll(:, :, :)
+      allocate(spin)
+      call get_spin_constants(wll, mol, calc%bas)
+      call new_spin_polarization(spin, mol, wll, calc%bas%nsh_id)
+      call move_alloc(spin, cont)
+      call calc%push_back(cont)
+   end block
+
+   call xtb_singlepoint(ctx, mol, calc, wfn, acc, energy, gradient, sigma, verbosity=0)
+
+   call numdiff_grad(ctx, mol, calc, wfn, numgrad)
+   
+   if (any(abs(gradient - numgrad) > thr2)) then
+      call test_failed(error, "Gradients do not match")
+      print'(3es21.14)', gradient
+      print'("---")'
+      print'(3es21.14)', numgrad
+      print'("---")'
+      print'(3es21.14)', gradient-numgrad
+   end if
+
+end subroutine test_numgrad
+
+
+subroutine test_g1_p10_num(error)
+
+   !> Error handling
+   type(error_type), allocatable, intent(out) :: error
+   
+   type(structure_type) :: mol
+   type(xtb_calculator) :: calc
+   
+   call rse43_p10(mol)
+   call new_gfn1_calculator(calc, mol)
+
+   call test_numgrad(error, calc, mol)
+  
+end subroutine test_g1_p10_num
+
+
+subroutine test_g2_p10_num(error)
+
+   !> Error handling
+   type(error_type), allocatable, intent(out) :: error
+   
+   type(structure_type) :: mol
+   type(xtb_calculator) :: calc
+   
+   call rse43_p10(mol)
+   call new_gfn2_calculator(calc, mol)
+
+   call test_numgrad(error, calc, mol)
+  
+end subroutine test_g2_p10_num
+
+
+!!!!!!!!!!!!!!!!!!!
+! Numerical sigma !
+!!!!!!!!!!!!!!!!!!!
+
+
+subroutine numdiff_sigma(ctx, mol, calc, wfn, numsigma)
+   type(context_type), intent(inout) :: ctx
+   type(structure_type), intent(in) :: mol
+   type(xtb_calculator), intent(in) :: calc
+   type(wavefunction_type), intent(in) :: wfn
+   real(wp), intent(out) :: numsigma(:, :)
+
+   integer :: ic, jc
+   real(wp) :: er, el, eps(3, 3)
+   type(structure_type) :: moli
+   type(wavefunction_type) :: wfni
+   real(wp), parameter :: step = 1.0e-6_wp
+   real(wp), parameter :: unity(3, 3) = reshape(&
+      & [1, 0, 0, 0, 1, 0, 0, 0, 1], shape(unity))
+
+   numsigma(:, :) = 0.0
+   eps(:, :) = unity
+   do ic = 1, 3
+      do jc = 1, 3
+         moli = mol
+         wfni = wfn
+         eps(jc, ic) = eps(jc, ic) + step
+         moli%xyz(:, :) = matmul(eps, mol%xyz)
+         if (any(mol%periodic)) moli%lattice(:, :) = matmul(eps, mol%lattice)
+         call xtb_singlepoint(ctx, moli, calc, wfni, acc, er, verbosity=0)
+
+         moli = mol
+         wfni = wfn
+         eps(jc, ic) = eps(jc, ic) - step
+         moli%xyz(:, :) = matmul(eps, mol%xyz)
+         if (any(mol%periodic)) moli%lattice(:, :) = matmul(eps, mol%lattice)
+         call xtb_singlepoint(ctx, moli, calc, wfni, acc, el, verbosity=0)
+
+         numsigma(jc, ic) = 0.5_wp*(er - el)/step
+      end do
+   end do
+   numsigma = (numsigma + transpose(numsigma)) * 0.5_wp
+end subroutine numdiff_sigma
+
+
+subroutine test_numsigma(error, calc, mol)
+
+   !> Error handling
+   type(error_type), allocatable, intent(out) :: error
+   !> Extended tight-binding calculator
+   type(xtb_calculator), intent(inout) :: calc
+   !> Molecular structure data
+   type(structure_type) :: mol
+   
+   type(context_type) :: ctx
+   type(wavefunction_type) :: wfn
+   class(container_type), allocatable :: cont
+   real(wp) :: energy
+   real(wp), allocatable :: gradient(:, :), sigma(:, :), numsigma(:, :)
+
+   allocate(gradient(3, mol%nat), sigma(3, 3), numsigma(3, 3))
+   energy = 0.0_wp
+   gradient(:, :) = 0.0_wp
+   sigma(:, :) = 0.0_wp
+
+   call new_wavefunction(wfn, mol%nat, calc%bas%nsh, calc%bas%nao, 2, kt)
+
+   block
+      type(spin_polarization), allocatable :: spin
+      real(wp), allocatable :: wll(:, :, :)
+      allocate(spin)
+      call get_spin_constants(wll, mol, calc%bas)
+      call new_spin_polarization(spin, mol, wll, calc%bas%nsh_id)
+      call move_alloc(spin, cont)
+      call calc%push_back(cont)
+   end block
+
+   call xtb_singlepoint(ctx, mol, calc, wfn, acc, energy, gradient, sigma, verbosity=0)
+
+   call numdiff_sigma(ctx, mol, calc, wfn, numsigma)
+
+   if (any(abs(sigma - numsigma) > thr2)) then
+      call test_failed(error, "Strain derivatives do not match")
+      print'(3es21.14)', sigma
+      print'("---")'
+      print'(3es21.14)', numsigma
+      print'("---")'
+      print'(3es21.14)', sigma-numsigma
+   end if
+
+end subroutine test_numsigma
+
+
+subroutine test_s1_p10_num(error)
+
+   !> Error handling
+   type(error_type), allocatable, intent(out) :: error
+   
+   type(structure_type) :: mol
+   type(xtb_calculator) :: calc
+   
+   call rse43_p10(mol)
+   call new_gfn1_calculator(calc, mol)
+
+   call test_numsigma(error, calc, mol)
+  
+end subroutine test_s1_p10_num
+
+
+subroutine test_s2_p10_num(error)
+
+   !> Error handling
+   type(error_type), allocatable, intent(out) :: error
+   
+   type(structure_type) :: mol
+   type(xtb_calculator) :: calc
+   
+   call rse43_p10(mol)
+   call new_gfn2_calculator(calc, mol)
+
+   call test_numsigma(error, calc, mol)
+  
+end subroutine test_s2_p10_num
+
+
+! Helper functions
 
 
 subroutine get_spin_constants(wll, mol, bas)
