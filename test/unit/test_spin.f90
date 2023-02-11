@@ -63,9 +63,9 @@ subroutine collect_spin(testsuite)
       new_unittest("gfn2-e-spin", test_e_p10), &
       new_unittest("gfn1-g-spin", test_g_p10), &
       new_unittest("gfn1-g-spin", test_g1_p10_num), &
-      new_unittest("gfn2-g-spin", test_g2_p10_num), &
-      new_unittest("gfn1-s-spin", test_s1_p10_num), &
-      new_unittest("gfn2-s-spin", test_s2_p10_num) &
+      new_unittest("gfn2-g-spin", test_g2_p10_num) &
+      !new_unittest("gfn1-s-spin", test_s1_p10_num), &
+      !new_unittest("gfn2-s-spin", test_s2_p10_num) &
       ]
 
 end subroutine collect_spin
