@@ -388,7 +388,7 @@ subroutine test_g1_p10_num(error)
    type(xtb_calculator) :: calc
    
    call rse43_p10(mol)
-   call new_gfn1_calculator(calc, mol)
+   call new_gfn1_calculator(calc, mol, error)
 
    call test_numgrad(error, calc, mol)
   
@@ -404,7 +404,7 @@ subroutine test_g2_p10_num(error)
    type(xtb_calculator) :: calc
    
    call rse43_p10(mol)
-   call new_gfn2_calculator(calc, mol)
+   call new_gfn2_calculator(calc, mol, error)
 
    call test_numgrad(error, calc, mol)
   
@@ -513,7 +513,7 @@ subroutine test_s1_p10_num(error)
    type(xtb_calculator) :: calc
    
    call rse43_p10(mol)
-   call new_gfn1_calculator(calc, mol)
+   call new_gfn1_calculator(calc, mol, error)
 
    call test_numsigma(error, calc, mol)
   
@@ -529,7 +529,7 @@ subroutine test_s2_p10_num(error)
    type(xtb_calculator) :: calc
    
    call rse43_p10(mol)
-   call new_gfn2_calculator(calc, mol)
+   call new_gfn2_calculator(calc, mol, error)
 
    call test_numsigma(error, calc, mol)
   
