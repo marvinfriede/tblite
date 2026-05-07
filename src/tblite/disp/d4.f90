@@ -26,6 +26,7 @@ module tblite_disp_d4
    use dftd4, only : dispersion_model, d4_model, d4s_model, &
       & damping_param, rational_damping_param, realspace_cutoff, &
       & new_d4_model, new_d4s_model
+   use dftd4_cutoff, only : smooth_cutoff
    use dftd4_model, only : d4_qmod
    use tblite_blas, only : dot, gemv
    use tblite_container_cache, only : container_cache
@@ -67,13 +68,15 @@ module tblite_disp_d4
 
    character(len=*), parameter :: label_d4 = "self-consistent DFT-D4 dispersion"
    character(len=*), parameter :: label_d4s = "self-consistent DFT-D4S dispersion"
+   real(wp), parameter :: default_disp2_width = 0.0_wp
+   real(wp), parameter :: default_disp3_width = 0.0_wp
 
 
 contains
 
 
 !> Create a new instance of a self-consistent D4 dispersion correction
-subroutine new_d4_dispersion(self, mol, s6, s8, a1, a2, s9, error)
+subroutine new_d4_dispersion(self, mol, s6, s8, a1, a2, s9, error, disp2_width, disp3_width)
    !> Instance of the dispersion correction
    type(d4_dispersion), intent(out) :: self
    !> Molecular structure data
@@ -82,8 +85,18 @@ subroutine new_d4_dispersion(self, mol, s6, s8, a1, a2, s9, error)
    real(wp), intent(in) :: s6, s8, a1, a2, s9
    !> Error handling
    type(error_type), allocatable, intent(out) :: error
+   !> Width of smooth two-body interaction cutoff
+   real(wp), intent(in), optional :: disp2_width
+   !> Width of smooth three-body interaction cutoff
+   real(wp), intent(in), optional :: disp3_width
 
    type(d4_model), allocatable :: tmp
+   real(wp) :: width2, width3
+
+   width2 = default_disp2_width
+   width3 = default_disp3_width
+   if (present(disp2_width)) width2 = disp2_width
+   if (present(disp3_width)) width3 = disp3_width
 
    self%label = label_d4
 
@@ -94,7 +107,8 @@ subroutine new_d4_dispersion(self, mol, s6, s8, a1, a2, s9, error)
    call move_alloc(tmp, self%model)
 
    self%param = rational_damping_param(s6=s6, s8=s8, s9=s9, a1=a1, a2=a2)
-   self%cutoff = realspace_cutoff(disp3=25.0_wp, disp2=50.0_wp)
+   self%cutoff = realspace_cutoff(disp3=25.0_wp, disp2=50.0_wp, &
+      & width2=width2, width3=width3)
 
    call new_ncoord(self%ncoord, mol, cn_count%dftd4, error, &
       & cutoff=self%cutoff%cn, rcov=self%model%rcov, en=self%model%en)
@@ -102,7 +116,7 @@ end subroutine new_d4_dispersion
 
 
 !> Create a new instance of a self-consistent D4S dispersion correction
-subroutine new_d4s_dispersion(self, mol, s6, s8, a1, a2, s9, error)
+subroutine new_d4s_dispersion(self, mol, s6, s8, a1, a2, s9, error, disp2_width, disp3_width)
    !> Instance of the dispersion correction
    type(d4_dispersion), intent(out) :: self
    !> Molecular structure data
@@ -111,8 +125,18 @@ subroutine new_d4s_dispersion(self, mol, s6, s8, a1, a2, s9, error)
    real(wp), intent(in) :: s6, s8, a1, a2, s9
    !> Error handling
    type(error_type), allocatable, intent(out) :: error
+   !> Width of smooth two-body interaction cutoff
+   real(wp), intent(in), optional :: disp2_width
+   !> Width of smooth three-body interaction cutoff
+   real(wp), intent(in), optional :: disp3_width
 
    type(d4s_model), allocatable :: tmp
+   real(wp) :: width2, width3
+
+   width2 = default_disp2_width
+   width3 = default_disp3_width
+   if (present(disp2_width)) width2 = disp2_width
+   if (present(disp3_width)) width3 = disp3_width
 
    self%label = label_d4s
 
@@ -123,7 +147,8 @@ subroutine new_d4s_dispersion(self, mol, s6, s8, a1, a2, s9, error)
    call move_alloc(tmp, self%model)
 
    self%param = rational_damping_param(s6=s6, s8=s8, s9=s9, a1=a1, a2=a2)
-   self%cutoff = realspace_cutoff(disp3=25.0_wp, disp2=50.0_wp)
+   self%cutoff = realspace_cutoff(disp3=25.0_wp, disp2=50.0_wp, &
+      & width2=width2, width3=width3)
 
    call new_ncoord(self%ncoord, mol, cn_count%dftd4, error, &
       & cutoff=self%cutoff%cn, rcov=self%model%rcov, en=self%model%en)
@@ -160,7 +185,7 @@ subroutine update(self, mol, cache)
 
    call get_lattice_points(mol%periodic, mol%lattice, self%cutoff%disp2, lattr)
    call get_dispersion_matrix(mol, self%model, self%param, lattr, self%cutoff%disp2, &
-      & self%model%r4r2, ptr%dispmat)
+      & self%cutoff%width2, self%model%r4r2, ptr%dispmat)
 end subroutine update
 
 
@@ -323,14 +348,14 @@ subroutine get_gradient(self, mol, cache, wfn, gradient, sigma)
    dEdcn(:) = 0.0_wp
    dEdq(:) = 0.0_wp
    call get_lattice_points(mol%periodic, mol%lattice, self%cutoff%disp2, lattr)
-   call self%param%get_dispersion2(mol, lattr, self%cutoff%disp2, self%model%r4r2, &
-      & c6, dc6dcn, dc6dq, energies, dEdcn, dEdq, gradient, sigma)
+   call self%param%get_dispersion2(mol, lattr, self%cutoff%disp2, self%cutoff%width2, &
+      & self%model%r4r2, c6, dc6dcn, dc6dq, energies, dEdcn, dEdq, gradient, sigma)
    call gemv(ptr%dcndr, dEdcn, gradient, beta=1.0_wp)
    call gemv(ptr%dcndL, dEdcn, sigma, beta=1.0_wp)
 end subroutine get_gradient
 
 
-subroutine get_dispersion_matrix(mol, disp, param, trans, cutoff, r4r2, dispmat)
+subroutine get_dispersion_matrix(mol, disp, param, trans, cutoff, width, r4r2, dispmat)
    !> Molecular structure data
    type(structure_type), intent(in) :: mol
    !> Damping parameters
@@ -341,21 +366,24 @@ subroutine get_dispersion_matrix(mol, disp, param, trans, cutoff, r4r2, dispmat)
    real(wp), intent(in) :: trans(:, :)
    !> Real space cutoff
    real(wp), intent(in) :: cutoff
+   !> Width of smooth cutoff
+   real(wp), intent(in) :: width
    !> Expectation values for r4 over r2 operator
    real(wp), intent(in) :: r4r2(:)
    !> Dispersion matrix
    real(wp), intent(out) :: dispmat(:, :, :, :)
 
    integer :: iat, jat, izp, jzp, jtr, iref, jref
-   real(wp) :: vec(3), r2, cutoff2, r0ij, rrij, t6, t8, edisp, dE
+   real(wp) :: vec(3), r2, r, cutoff2, r0ij, rrij, t6, t8
+   real(wp) :: edisp, dE, sw, dswdr
 
    dispmat(:, :, :, :) = 0.0_wp
    cutoff2 = cutoff**2
 
    !$omp parallel do schedule(runtime) default(none) &
-   !$omp shared(mol, param, disp, trans, cutoff2, r4r2, dispmat) &
+   !$omp shared(mol, param, disp, trans, cutoff, width, cutoff2, r4r2, dispmat) &
    !$omp private(iat, jat, izp, jzp, jtr, vec, r2, r0ij, rrij, &
-   !$omp& t6, t8, edisp, dE)
+   !$omp& t6, t8, edisp, dE, r, sw, dswdr)
    do iat = 1, mol%nat
       izp = mol%id(iat)
       do jat = 1, iat
@@ -367,11 +395,14 @@ subroutine get_dispersion_matrix(mol, disp, param, trans, cutoff, r4r2, dispmat)
             vec(:) = mol%xyz(:, iat) - (mol%xyz(:, jat) + trans(:, jtr))
             r2 = vec(1)*vec(1) + vec(2)*vec(2) + vec(3)*vec(3)
             if (r2 > cutoff2 .or. r2 < epsilon(1.0_wp)) cycle
+            r = sqrt(r2)
+            call smooth_cutoff(r, cutoff, width, sw, dswdr)
+            if (sw <= 0.0_wp) cycle
 
             t6 = 1.0_wp/(r2**3 + r0ij**6)
             t8 = 1.0_wp/(r2**4 + r0ij**8)
 
-            edisp = param%s6*t6 + param%s8*rrij*t8
+            edisp = sw * (param%s6*t6 + param%s8*rrij*t8)
 
             dE = dE - edisp
          end do
@@ -433,8 +464,8 @@ subroutine get_dispersion_nonsc(mol, disp, param, cutoff, cache, energies, gradi
    call disp%get_atomic_c6(mol, gwvec, gwdcn, gwdq, c6, dc6dcn, dc6dq)
 
    call get_lattice_points(mol%periodic, mol%lattice, cutoff%disp3, lattr)
-   call param%get_dispersion3(mol, lattr, cutoff%disp3, disp%r4r2, &
-      & c6, dc6dcn, dc6dq, energies, dEdcn, dEdq, gradient, sigma)
+   call param%get_dispersion3(mol, lattr, cutoff%disp3, cutoff%width3, &
+      & disp%r4r2, c6, dc6dcn, dc6dq, energies, dEdcn, dEdq, gradient, sigma)
    if (grad) then
       call gemv(cache%dcndr, dEdcn, gradient, beta=1.0_wp)
       call gemv(cache%dcndL, dEdcn, sigma, beta=1.0_wp)
